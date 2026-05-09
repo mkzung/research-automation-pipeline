@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Project-local data + output
+docker/datasets/
+docker/output/
+docker/n8n_data/
+*.parquet
+*.xlsx
+*.csv
+!docker/datasets/sample.csv
+
+# Secrets
+.env
+*.env.local
+**/rclone.conf

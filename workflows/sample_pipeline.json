@@ -1,0 +1,105 @@
+{
+  "name": "Research-Automation Pipeline (Generic Sample)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "manual_trigger",
+      "name": "When Triggered",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "parameters": {}
+    },
+    {
+      "id": "load_spec",
+      "name": "Load Study Spec",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [400, 300],
+      "parameters": {
+        "values": {
+          "string": [
+            {"name": "study_id", "value": "={{ $now.toFormat('yyyyLLddHHmm') }}_demo"},
+            {"name": "dataset_path", "value": "sample.csv"},
+            {"name": "question", "value": "Summarize key trends and surface anomalies."}
+          ]
+        }
+      }
+    },
+    {
+      "id": "preview",
+      "name": "Dataset Preview (runner)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [620, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://runner:5000/dataset-preview",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"path\": \"{{ $json.dataset_path }}\", \"sample_rows\": 5 }"
+      }
+    },
+    {
+      "id": "llm_narrative",
+      "name": "LLM: Generate Narrative + Chart Specs",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [860, 300],
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "responseFormat": "json_object",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a research analyst. Given a dataset preview and a question, return strict JSON with: headline (string), narrative (markdown string), chart_specs (list of {type, title, x, y, data}), caveats (list of strings)."
+          },
+          {
+            "role": "user",
+            "content": "Question: {{ $('Load Study Spec').item.json.question }}\\n\\nDataset preview:\\n{{ $json | jsonStringify }}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "render_charts",
+      "name": "Render Each Chart Spec",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://runner:5000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"script_path\": \"/app/src/chart_utility.py\", \"args\": [\"--spec\", \"-\", \"--output\", \"/output/{{ $('Load Study Spec').item.json.study_id }}_chart.png\"] }"
+      }
+    },
+    {
+      "id": "assemble_docx",
+      "name": "Assemble DOCX",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://runner:5000/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"script_path\": \"/app/src/post_to_docx.py\", \"args\": [\"--spec\", \"-\", \"--output\", \"/output/{{ $('Load Study Spec').item.json.study_id }}.docx\"] }"
+      }
+    }
+  ],
+  "connections": {
+    "When Triggered":               {"main": [[{"node": "Load Study Spec",                "type": "main", "index": 0}]]},
+    "Load Study Spec":              {"main": [[{"node": "Dataset Preview (runner)",       "type": "main", "index": 0}]]},
+    "Dataset Preview (runner)":     {"main": [[{"node": "LLM: Generate Narrative + Chart Specs", "type": "main", "index": 0}]]},
+    "LLM: Generate Narrative + Chart Specs": {"main": [[{"node": "Render Each Chart Spec","type": "main", "index": 0}]]},
+    "Render Each Chart Spec":       {"main": [[{"node": "Assemble DOCX",                  "type": "main", "index": 0}]]}
+  },
+  "_comment": "Generic 5-step research-automation pattern. Input: study spec → dataset preview → LLM narrative + chart specs → render charts → assemble DOCX. No actual credentials are bundled — set OpenAI credential in your n8n instance before running."
+}
