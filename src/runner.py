@@ -24,8 +24,18 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-DATASETS_DIR = Path(os.environ.get("DATASETS_DIR", "/app/datasets"))
-OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "/app/output"))
+# Defaults: /app/... inside Docker container, repo-local when running outside
+# (so `python src/runner.py` works during local development too).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_IN_DOCKER = Path("/app").is_dir()
+DATASETS_DIR = Path(os.environ.get(
+    "DATASETS_DIR",
+    "/app/datasets" if _IN_DOCKER else str(_REPO_ROOT / "datasets"),
+))
+OUTPUT_DIR = Path(os.environ.get(
+    "OUTPUT_DIR",
+    "/app/output" if _IN_DOCKER else str(_REPO_ROOT / "output"),
+))
 RUN_TIMEOUT_S = int(os.environ.get("RUN_TIMEOUT_S", "300"))
 
 VERSION = "1.0.0"
@@ -199,5 +209,10 @@ def _to_jsonable(o):
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError) as e:
+        sys.stderr.write(f"[runner] cannot create OUTPUT_DIR={OUTPUT_DIR} ({e}); "
+                         f"set OUTPUT_DIR env var to a writeable path\n")
+        sys.exit(1)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")))
